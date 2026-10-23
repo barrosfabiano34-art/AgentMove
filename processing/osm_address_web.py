@@ -43,7 +43,7 @@ def save_worker():
     with open(os.path.join(NOMINATIM_PATH, '{}.csv'.format(CURRENT_CITY)), 'a') as f:
         if f.tell() == 0:
             f.write('city\tvenue_id\tlng\tlat\taddress\n')
-        while running:
+        while running or not q.empty():
             try:  
                 item = q.get(block=True, timeout=10)
                 print(item)
