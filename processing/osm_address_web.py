@@ -9,11 +9,11 @@ from geopy.extra.rate_limiter import RateLimiter
 
 from config import NO_ADDRESS_TRAJ_DIR, NOMINATIM_PATH, PROXY
 
-CURRENT_CITY = "Moscow"
+CURRENT_CITY = os.environ.get("AGENTMOVE_CITY", "Shanghai")
 
 
 def reverse_geocode(lat, lon):
-    geolocator = Nominatim(user_agent="MyGeocodingApp2",timeout=1,proxies=PROXY)
+    geolocator = Nominatim(user_agent="MyGeocodingApp2",timeout=10,proxies=PROXY if os.environ.get("AGENTMOVE_USE_PROXY") else None)
     geocode = RateLimiter(geolocator.reverse, min_delay_seconds=1)
     location = geocode((lat, lon), exactly_one=True,language='en')
     return location.address if location else None
@@ -40,7 +40,9 @@ def process_map(city, venue_city):
 
 
 def save_worker():
-    with open(os.path.join(NOMINATIM_PATH, '{}_address.txt'.format(CURRENT_CITY)), 'a') as f:
+    with open(os.path.join(NOMINATIM_PATH, '{}.csv'.format(CURRENT_CITY)), 'a') as f:
+        if f.tell() == 0:
+            f.write('city\tvenue_id\tlng\tlat\taddress\n')
         while running:
             try:  
                 item = q.get(block=True, timeout=10)
@@ -55,14 +57,16 @@ if __name__ == '__main__':
     q = Queue()
     running = True
     
-    thread = threading.Thread(target=save_worker, daemon=True).start()
+    os.makedirs(NOMINATIM_PATH, exist_ok=True)
+    thread = threading.Thread(target=save_worker, daemon=True)
+    thread.start()
     
     venue_map = {}
     cities = []
     print("reading city files...")
     for file in os.listdir(NO_ADDRESS_TRAJ_DIR):
         fs = pd.read_csv(os.path.join(NO_ADDRESS_TRAJ_DIR, file))
-        city = file.split("_")[0]
+        city = file.split("_filtered")[0]
         print(f"processing city {city}...")
 
         if city != CURRENT_CITY:
@@ -72,8 +76,8 @@ if __name__ == '__main__':
         venue_map[city] = {}
         for _,row in fs.iterrows():
             venue = row['venue_id']
-            lon = row['lon']
-            lat = row['lat']
+            lon = row['longitude']
+            lat = row['latitude']
             if venue not in venue_map[city]:
                 venue_map[city][venue] = (lon, lat)
         
